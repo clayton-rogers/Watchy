@@ -1,6 +1,6 @@
 #include "Watchy.h"
 
-DS3232RTC Watchy::RTC(false); 
+DS3232RTC Watchy::RTC(false);
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> Watchy::display(GxEPD2_154_D67(CS, DC, RESET, BUSY));
 
 RTC_DATA_ATTR int guiState;
@@ -51,10 +51,10 @@ void Watchy::init(String datetime){
                 tm.Second = 0;
                 time_t t = makeTime(tm);
                 RTC.set(t);
-                RTC.read(currentTime);           
+                RTC.read(currentTime);
                 showWatchFace(true); //partial updates on tick
             }
-            break;        
+            break;
         #endif
         case ESP_SLEEP_WAKEUP_EXT0: //RTC Alarm
             RTC.alarm(ALARM_2); //resets the alarm flag in the RTC
@@ -80,10 +80,10 @@ void Watchy::init(String datetime){
 void Watchy::deepSleep(){
   #ifndef ESP_RTC
   esp_sleep_enable_ext0_wakeup(RTC_PIN, 0); //enable deep sleep wake on RTC interrupt
-  #endif  
+  #endif
   #ifdef ESP_RTC
   esp_sleep_enable_timer_wakeup(60000000);
-  #endif 
+  #endif
   esp_sleep_enable_ext1_wakeup(BTN_PIN_MASK, ESP_EXT1_WAKEUP_ANY_HIGH); //enable deep sleep wake on button press
   esp_deep_sleep_start();
 }
@@ -92,7 +92,7 @@ void Watchy::_rtcConfig(String datetime){
     if(datetime != NULL){
         const time_t FUDGE(30);//fudge factor to allow for upload time, etc. (seconds, YMMV)
         tmElements_t tm;
-        tm.Year = getValue(datetime, ':', 0).toInt() - YEAR_OFFSET;//offset from 1970, since year is stored in uint8_t        
+        tm.Year = getValue(datetime, ':', 0).toInt() - YEAR_OFFSET;//offset from 1970, since year is stored in uint8_t
         tm.Month = getValue(datetime, ':', 1).toInt();
         tm.Day = getValue(datetime, ':', 2).toInt();
         tm.Hour = getValue(datetime, ':', 3).toInt();
@@ -112,146 +112,97 @@ void Watchy::_rtcConfig(String datetime){
 }
 
 void Watchy::handleButtonPress(){
-  uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
-  //Menu Button
-  if (wakeupBit & MENU_BTN_MASK){
-    if(guiState == WATCHFACE_STATE){//enter menu state if coming from watch face
-      showMenu(menuIndex, false);
-    }else if(guiState == MAIN_MENU_STATE){//if already in menu, then select menu item
-      switch(menuIndex)
-      {
-        case 0:
-          showBattery();
-          break;
-        case 1:
-          showBuzz();
-          break;          
-        case 2:
-          showAccelerometer();
-          break;
-        case 3:
-          setTime();
-          break;
-        case 4:
-          setupWifi();
-          break;                    
-        case 5:
-          showUpdateFW();
-          break;
-        default:
-          break;                              
-      }
-    }else if(guiState == FW_UPDATE_STATE){
-      updateFWBegin();
-    }
-  }
-  //Back Button
-  else if (wakeupBit & BACK_BTN_MASK){
-    if(guiState == MAIN_MENU_STATE){//exit to watch face if already in menu
-      RTC.alarm(ALARM_2); //resets the alarm flag in the RTC
-      RTC.read(currentTime);
-      showWatchFace(false);
-    }else if(guiState == APP_STATE){
-      showMenu(menuIndex, false);//exit to menu if already in app
-    }else if(guiState == FW_UPDATE_STATE){
-      showMenu(menuIndex, false);//exit to menu if already in app
-    }
-  }
-  //Up Button
-  else if (wakeupBit & UP_BTN_MASK){
-    if(guiState == MAIN_MENU_STATE){//increment menu index
-      menuIndex--;
-      if(menuIndex < 0){
-        menuIndex = MENU_LENGTH - 1;
-      }    
-      showMenu(menuIndex, true);
-    }
-  }
-  //Down Button
-  else if (wakeupBit & DOWN_BTN_MASK){
-    if(guiState == MAIN_MENU_STATE){//decrement menu index
-      menuIndex++;
-      if(menuIndex > MENU_LENGTH - 1){
-        menuIndex = 0;
-      }
-      showMenu(menuIndex, true);
-    }
-  }
-  
-  /***************** fast menu *****************/
-  bool timeout = false;
-  long lastTimeout = millis();
-  pinMode(MENU_BTN_PIN, INPUT);
-  pinMode(BACK_BTN_PIN, INPUT);
-  pinMode(UP_BTN_PIN, INPUT);
-  pinMode(DOWN_BTN_PIN, INPUT);
-  while(!timeout){
-      if(millis() - lastTimeout > 5000){
-          timeout = true;
-      }else{
-          if(digitalRead(MENU_BTN_PIN) == 1){
-            lastTimeout = millis();  
-            if(guiState == MAIN_MENU_STATE){//if already in menu, then select menu item
-                switch(menuIndex)
-                {
+    uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
+
+    // Initially button press state is populated by the wakup
+    bool menu_pressed = wakeupBit & MENU_BTN_MASK;
+    bool back_pressed = wakeupBit & BACK_BTN_MASK;
+    bool up_pressed   = wakeupBit & UP_BTN_MASK;
+    bool down_pressed = wakeupBit & DOWN_BTN_MASK;
+
+    bool timeout = false;
+    long lastTimeout = millis();
+    pinMode(MENU_BTN_PIN, INPUT);
+    pinMode(BACK_BTN_PIN, INPUT);
+    pinMode(UP_BTN_PIN, INPUT);
+    pinMode(DOWN_BTN_PIN, INPUT);
+    while (!timeout) {
+        if (menu_pressed) {
+            if (guiState == WATCHFACE_STATE) {
+                showMenu(menuIndex, false);
+            } else if (guiState == MAIN_MENU_STATE) {
+                switch(menuIndex) {
                     case 0:
-                    showBattery();
-                    break;
+                        showBattery();
+                        break;
                     case 1:
-                    showBuzz();
-                    break;          
+                        showBuzz();
+                        break;
                     case 2:
-                    showAccelerometer();
-                    break;
+                        showAccelerometer();
+                        break;
                     case 3:
-                    setTime();
-                    break;
+                        setTime();
+                        break;
                     case 4:
-                    setupWifi();
-                    break;                    
+                        setupWifi();
+                        break;
                     case 5:
-                    showUpdateFW();
-                    break;
+                        showUpdateFW();
+                        break;
                     default:
-                    break;                              
+                        break;
                 }
-            }else if(guiState == FW_UPDATE_STATE){
+            } else if (guiState == FW_UPDATE_STATE) {
                 updateFWBegin();
             }
-          }else if(digitalRead(BACK_BTN_PIN) == 1){
-            lastTimeout = millis();
-            if(guiState == MAIN_MENU_STATE){//exit to watch face if already in menu
-            RTC.alarm(ALARM_2); //resets the alarm flag in the RTC
-            RTC.read(currentTime);
-            showWatchFace(false);
-            break; //leave loop
-            }else if(guiState == APP_STATE){
-            showMenu(menuIndex, false);//exit to menu if already in app
-            }else if(guiState == FW_UPDATE_STATE){
-            showMenu(menuIndex, false);//exit to menu if already in app
-            }            
-          }else if(digitalRead(UP_BTN_PIN) == 1){
-            lastTimeout = millis();
-            if(guiState == MAIN_MENU_STATE){//increment menu index
-            menuIndex--;
-            if(menuIndex < 0){
-                menuIndex = MENU_LENGTH - 1;
-            }    
-            showFastMenu(menuIndex);
-            }            
-          }else if(digitalRead(DOWN_BTN_PIN) == 1){
-            lastTimeout = millis();
-            if(guiState == MAIN_MENU_STATE){//decrement menu index
-            menuIndex++;
-            if(menuIndex > MENU_LENGTH - 1){
-                menuIndex = 0;
+        } else if (back_pressed) {
+            if (guiState == MAIN_MENU_STATE) {//exit to watch face if already in menu
+                RTC.alarm(ALARM_2); //resets the alarm flag in the RTC
+                RTC.read(currentTime);
+                showWatchFace(false);
+                break; // leave menu, go back to sleep
+            } else if (guiState == APP_STATE) {
+                showMenu(menuIndex, false);//exit to menu if already in app
+            } else if (guiState == FW_UPDATE_STATE) {
+                showMenu(menuIndex, false);//exit to menu if already in app
             }
-            showFastMenu(menuIndex);
-            }         
-          }
-      }
-  }
-  display.hibernate();    
+        } else if (up_pressed) {
+            if (guiState == MAIN_MENU_STATE) {//increment menu index
+                menuIndex--;
+                if (menuIndex < 0) {
+                    menuIndex = MENU_LENGTH - 1;
+                }
+                showMenu(menuIndex, true);
+            }
+        } else if (down_pressed) {
+            if(guiState == MAIN_MENU_STATE){//decrement menu index
+                menuIndex++;
+                if (menuIndex > MENU_LENGTH - 1) {
+                    menuIndex = 0;
+                }
+                showMenu(menuIndex, true);
+            }
+        }
+
+        // If any button is pressed, reset the timeout
+        // Go back to sleep after 5 seconds if no button is pressed
+        if (menu_pressed || back_pressed || up_pressed || down_pressed) {
+            lastTimeout = millis();
+        } else {
+            if (millis() - lastTimeout > 5000) {
+                timeout = true;
+            }
+        }
+
+        // Query new button state
+        menu_pressed = digitalRead(MENU_BTN_PIN);
+        back_pressed = digitalRead(BACK_BTN_PIN);
+        up_pressed   = digitalRead(UP_BTN_PIN);
+        down_pressed = digitalRead(DOWN_BTN_PIN);
+    }
+
+    display.hibernate();
 }
 
 void Watchy::showMenu(byte menuIndex, bool partialRefresh){
@@ -265,53 +216,23 @@ void Watchy::showMenu(byte menuIndex, bool partialRefresh){
     int16_t yPos;
 
     const char *menuItems[] = {"Check Battery", "Vibrate Motor", "Show Accelerometer", "Set Time", "Setup WiFi", "Update Firmware"};
-    for(int i=0; i<MENU_LENGTH; i++){
-    yPos = 30+(MENU_HEIGHT*i);
-    display.setCursor(0, yPos);
-    if(i == menuIndex){
-        display.getTextBounds(menuItems[i], 0, yPos, &x1, &y1, &w, &h);
-        display.fillRect(x1-1, y1-10, 200, h+15, GxEPD_WHITE);
-        display.setTextColor(GxEPD_BLACK);
-        display.println(menuItems[i]);      
-    }else{
-        display.setTextColor(GxEPD_WHITE);
-        display.println(menuItems[i]);
-    }   
+    for (int i = 0; i < MENU_LENGTH; i++){
+        yPos = 30+(MENU_HEIGHT*i);
+        display.setCursor(0, yPos);
+        if (i == menuIndex) {
+            display.getTextBounds(menuItems[i], 0, yPos, &x1, &y1, &w, &h);
+            display.fillRect(x1-1, y1-10, 200, h+15, GxEPD_WHITE);
+            display.setTextColor(GxEPD_BLACK);
+            display.println(menuItems[i]);
+        } else {
+            display.setTextColor(GxEPD_WHITE);
+            display.println(menuItems[i]);
+        }
     }
 
     display.display(partialRefresh);
-    //display.hibernate();
 
-    guiState = MAIN_MENU_STATE;    
-}
-
-void Watchy::showFastMenu(byte menuIndex){
-    display.setFullWindow();
-    display.fillScreen(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold9pt7b);
-
-    int16_t  x1, y1;
-    uint16_t w, h;
-    int16_t yPos;
-
-    const char *menuItems[] = {"Check Battery", "Vibrate Motor", "Show Accelerometer", "Set Time", "Setup WiFi", "Update Firmware"};
-    for(int i=0; i<MENU_LENGTH; i++){
-    yPos = 30+(MENU_HEIGHT*i);
-    display.setCursor(0, yPos);
-    if(i == menuIndex){
-        display.getTextBounds(menuItems[i], 0, yPos, &x1, &y1, &w, &h);
-        display.fillRect(x1-1, y1-10, 200, h+15, GxEPD_WHITE);
-        display.setTextColor(GxEPD_BLACK);
-        display.println(menuItems[i]);      
-    }else{
-        display.setTextColor(GxEPD_WHITE);
-        display.println(menuItems[i]);
-    }   
-    }
-
-    display.display(true);
-
-    guiState = MAIN_MENU_STATE;    
+    guiState = MAIN_MENU_STATE;
 }
 
 void Watchy::showBattery(){
@@ -329,7 +250,7 @@ void Watchy::showBattery(){
     display.display(false); //full refresh
     display.hibernate();
 
-    guiState = APP_STATE;      
+    guiState = APP_STATE;
 }
 
 void Watchy::showBuzz(){
@@ -343,7 +264,7 @@ void Watchy::showBuzz(){
     display.display(false); //full refresh
     display.hibernate();
     vibMotor();
-    showMenu(menuIndex, false);    
+    showMenu(menuIndex, false);
 }
 
 void Watchy::vibMotor(uint8_t intervalMs, uint8_t length){
@@ -374,8 +295,8 @@ void Watchy::setTime(){
 
     pinMode(DOWN_BTN_PIN, INPUT);
     pinMode(UP_BTN_PIN, INPUT);
-    pinMode(MENU_BTN_PIN, INPUT);  
-    pinMode(BACK_BTN_PIN, INPUT);  
+    pinMode(MENU_BTN_PIN, INPUT);
+    pinMode(BACK_BTN_PIN, INPUT);
 
     display.init(0, true); //_initial_refresh to false to prevent full update on init
     display.setFullWindow();
@@ -392,7 +313,7 @@ void Watchy::setTime(){
         if(setIndex != SET_HOUR){
         setIndex--;
         }
-    }      
+    }
 
     blink = 1 - blink;
 
@@ -413,10 +334,10 @@ void Watchy::setTime(){
             break;
         case SET_DAY:
             day == 31 ? (day = 1) : day++;
-            break;                         
+            break;
         default:
             break;
-        }      
+        }
     }
 
     if(digitalRead(UP_BTN_PIN) == 1){
@@ -436,11 +357,11 @@ void Watchy::setTime(){
             break;
         case SET_DAY:
             day == 1 ? (day = 31) : day--;
-            break;          
+            break;
         default:
             break;
-        }   
-    }    
+        }
+    }
 
     display.fillScreen(GxEPD_BLACK);
     display.setTextColor(GxEPD_WHITE);
@@ -451,7 +372,7 @@ void Watchy::setTime(){
         display.setTextColor(blink ? GxEPD_WHITE : GxEPD_BLACK);
     }
     if(hour < 10){
-        display.print("0");      
+        display.print("0");
     }
     display.print(hour);
 
@@ -463,7 +384,7 @@ void Watchy::setTime(){
         display.setTextColor(blink ? GxEPD_WHITE : GxEPD_BLACK);
     }
     if(minute < 10){
-        display.print("0");      
+        display.print("0");
     }
     display.print(minute);
 
@@ -473,7 +394,7 @@ void Watchy::setTime(){
     display.setCursor(45, 150);
     if(setIndex == SET_YEAR){//blink minute digits
         display.setTextColor(blink ? GxEPD_WHITE : GxEPD_BLACK);
-    }    
+    }
     display.print(2000+year);
 
     display.setTextColor(GxEPD_WHITE);
@@ -481,10 +402,10 @@ void Watchy::setTime(){
 
     if(setIndex == SET_MONTH){//blink minute digits
         display.setTextColor(blink ? GxEPD_WHITE : GxEPD_BLACK);
-    }   
+    }
     if(month < 10){
-        display.print("0");      
-    }     
+        display.print("0");
+    }
     display.print(month);
 
     display.setTextColor(GxEPD_WHITE);
@@ -492,11 +413,11 @@ void Watchy::setTime(){
 
     if(setIndex == SET_DAY){//blink minute digits
         display.setTextColor(blink ? GxEPD_WHITE : GxEPD_BLACK);
-    }       
+    }
     if(day < 10){
-        display.print("0");      
-    }     
-    display.print(day); 
+        display.print("0");
+    }
+    display.print(day);
     display.display(true); //partial refresh
     }
 
@@ -528,7 +449,7 @@ void Watchy::showAccelerometer(){
     Accel acc;
 
     long previousMillis = 0;
-    long interval = 200;  
+    long interval = 200;
 
     guiState = APP_STATE;
 
@@ -547,7 +468,7 @@ void Watchy::showAccelerometer(){
         // Get acceleration data
         bool res = sensor.getAccel(acc);
         uint8_t direction = sensor.getDirection();
-        display.fillScreen(GxEPD_BLACK);      
+        display.fillScreen(GxEPD_BLACK);
         display.setCursor(0, 30);
         if(res == false) {
             display.println("getAccel FAIL");
@@ -608,8 +529,8 @@ void Watchy::drawWatchFace(){
     display.print(":");
     if(currentTime.Minute < 10){
         display.print("0");
-    }  
-    display.println(currentTime.Minute);    
+    }
+    display.println(currentTime.Minute);
 }
 
 weatherData Watchy::getWeatherData(){
@@ -624,7 +545,7 @@ weatherData Watchy::getWeatherData(){
                 String payload = http.getString();
                 JSONVar responseObject = JSON.parse(payload);
                 currentWeather.temperature = int(responseObject["main"]["temp"]);
-                currentWeather.weatherConditionCode = int(responseObject["weather"][0]["id"]);            
+                currentWeather.weatherConditionCode = int(responseObject["weather"][0]["id"]);
             }else{
                 //http error
             }
@@ -673,7 +594,7 @@ uint16_t Watchy::_writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uin
 }
 
 void Watchy::_bmaConfig(){
- 
+
     if (sensor.begin(_readRegister, _writeRegister, delay) == false) {
         //fail to init BMA
         return;
@@ -765,7 +686,7 @@ void Watchy::_bmaConfig(){
     sensor.enableStepCountInterrupt();
     sensor.enableTiltInterrupt();
     // It corresponds to isDoubleClick interrupt
-    sensor.enableWakeupInterrupt();  
+    sensor.enableWakeupInterrupt();
 }
 
 void Watchy::setupWifi(){
@@ -799,7 +720,7 @@ void Watchy::setupWifi(){
   WiFi.mode(WIFI_OFF);
   btStop();
 
-  guiState = APP_STATE;  
+  guiState = APP_STATE;
 }
 
 void Watchy::_configModeCallback (WiFiManager *myWiFiManager) {
@@ -853,7 +774,7 @@ void Watchy::showUpdateFW(){
     display.display(false); //full refresh
     display.hibernate();
 
-    guiState = FW_UPDATE_STATE;  
+    guiState = FW_UPDATE_STATE;
 }
 
 void Watchy::updateFWBegin(){
@@ -902,7 +823,7 @@ void Watchy::updateFWBegin(){
         display.println(" ");
         display.print(BT.howManyBytes());
         display.println(" bytes");
-        display.display(true); //partial refresh        
+        display.display(true); //partial refresh
         }
         if(currentStatus == 2){
         display.setFullWindow();
@@ -917,7 +838,7 @@ void Watchy::updateFWBegin(){
         display.display(false); //full refresh
 
         delay(2000);
-        esp_restart();           
+        esp_restart();
         }
         if(currentStatus == 4){
         display.setFullWindow();
@@ -944,7 +865,7 @@ void Watchy::updateFWBegin(){
 }
 
 // time_t compileTime()
-// {   
+// {
 //     const time_t FUDGE(10);    //fudge factor to allow for upload time, etc. (seconds, YMMV)
 //     const char *compDate = __DATE__, *compTime = __TIME__, *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
 //     char compMon[3], *m;
