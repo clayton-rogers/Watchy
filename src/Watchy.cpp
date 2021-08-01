@@ -10,6 +10,7 @@ RTC_DATA_ATTR bool WIFI_CONFIGURED;
 RTC_DATA_ATTR bool BLE_CONFIGURED;
 RTC_DATA_ATTR weatherData currentWeather;
 RTC_DATA_ATTR int weatherIntervalCounter = WEATHER_UPDATE_INTERVAL;
+RTC_DATA_ATTR float bat_adc_offset = 0.0f;
 
 String getValue(String data, char separator, int index)
 {
@@ -241,13 +242,52 @@ void Watchy::showBattery(){
     display.fillScreen(GxEPD_BLACK);
     display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_WHITE);
+
     display.setCursor(20, 30);
     display.println("Battery Voltage:");
+
     float voltage = getBatteryVoltage();
     display.setCursor(70, 80);
     display.print(voltage);
     display.println("V");
+
+    display.setCursor(20, 130);
+    display.print("Press Menu to");
+    display.setCursor(20, 150);
+    display.print("calibrate");
+
     display.display(false); //full refresh
+
+    while (1) {
+        if (digitalRead(MENU_BTN_PIN)) {
+            display.fillScreen(GxEPD_BLACK);
+            display.setCursor(0, 30);
+            display.println("Wait for full");
+            display.println("charge (red light");
+            display.println("off) then press");
+            display.println("Menu");
+            display.display(true); //full refresh
+            while (1) {
+                if (digitalRead(MENU_BTN_PIN)) {
+                    // We assume that the charging circuit accurately charges to 4.20 V
+                    bat_adc_offset = 0; // clear any current calibration
+                    float voltage = getBatteryVoltage();
+                    bat_adc_offset = 4.20f - voltage;
+                    display.setCursor(20, 150);
+                    display.println("Done!");
+                    display.display(true);
+                }
+                if (digitalRead(BACK_BTN_PIN)) {
+                    goto exit;
+                }
+            }
+        }
+        if (digitalRead(BACK_BTN_PIN)) {
+            goto exit;
+        }
+    }
+
+exit:
     display.hibernate();
 
     guiState = APP_STATE;
@@ -570,7 +610,7 @@ weatherData Watchy::getWeatherData(){
 
 float Watchy::getBatteryVoltage(){
     // Battery voltage goes through a 1/2 divider.
-    return analogReadMilliVolts(ADC_PIN) / 1000.0f * 2.0f;
+    return analogReadMilliVolts(ADC_PIN) / 1000.0f * 2.0f + bat_adc_offset;
 }
 
 uint16_t Watchy::_readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len)
