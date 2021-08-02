@@ -115,11 +115,20 @@ void Watchy::_rtcConfig(String datetime){
 void Watchy::handleButtonPress(){
     uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
 
-    // Initially button press state is populated by the wakup
+    // Initially button press state is populated by the wakeup
     bool menu_pressed = wakeupBit & MENU_BTN_MASK;
     bool back_pressed = wakeupBit & BACK_BTN_MASK;
     bool up_pressed   = wakeupBit & UP_BTN_MASK;
     bool down_pressed = wakeupBit & DOWN_BTN_MASK;
+
+    // Regardless of the wakeup button, if we're on the watchface, then update it
+    if (guiState == WATCHFACE_STATE && !menu_pressed) {
+        RTC.alarm(ALARM_2); //resets the alarm flag in the RTC
+        RTC.read(currentTime);
+        showWatchFace(true);
+        display.hibernate();
+        return;
+    }
 
     bool timeout = false;
     long lastTimeout = millis();
