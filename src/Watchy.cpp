@@ -144,6 +144,8 @@ void Watchy::handleButtonPress(){
                 switch(menuIndex) {
                     case 0:
                         showBattery();
+                        guiState = MAIN_MENU_STATE;
+                        showMenu(menuIndex, true);
                         break;
                     case 1:
                         showBuzz();
@@ -252,54 +254,82 @@ void Watchy::showBattery(){
     display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_WHITE);
 
-    display.setCursor(20, 30);
-    display.println("Battery Voltage:");
-
-    float voltage = getBatteryVoltage();
-    display.setCursor(70, 80);
-    display.print(voltage);
-    display.println("V");
-
-    display.setCursor(20, 130);
-    display.print("Press Menu to");
-    display.setCursor(20, 150);
-    display.print("calibrate");
-
-    display.display(false); //full refresh
+    enum battery_screen_state_type {
+        BAT_STATE_NONE,
+        READING,
+        WAITING_FOR_CHARGE,
+    };
+    int state = READING;
+    int new_state = BAT_STATE_NONE;
+    enum button_type {
+        BUTTON_NONE,
+        MENU,
+        BACK,
+        UP,
+        DOWN,
+    };
+    int button = BUTTON_NONE;
 
     while (1) {
-        if (digitalRead(MENU_BTN_PIN)) {
+        if (state == READING) {
+            if (button == MENU) new_state = WAITING_FOR_CHARGE;
+            if (button == BACK) break;
+            if (button == UP)   bat_adc_offset += 0.01f;
+            if (button == DOWN) bat_adc_offset -= 0.01f;
+
             display.fillScreen(GxEPD_BLACK);
-            display.setCursor(0, 30);
+            display.setCursor(65, 30);
+            display.println("Battery");
+            float voltage = getBatteryVoltage();
+            display.setCursor(0, 80);
+            display.print(" Voltage: ");
+            display.print(voltage);
+            display.println(" V");
+            display.print(" Offset:  ");
+            display.print(bat_adc_offset);
+            display.println(" V");
+            display.setCursor(20, 150);
+            display.print("Press Menu to");
+            display.setCursor(20, 170);
+            display.print("calibrate");
+            display.display(true);
+
+        } else if (state == WAITING_FOR_CHARGE) {
+            if (button == MENU) {
+                // We assume that the charging circuit accurately charges to 4.20 V
+                bat_adc_offset = 0; // clear any current calibration
+                float voltage = getBatteryVoltage();
+                bat_adc_offset = 4.20f - voltage;
+                new_state = READING;
+            }
+            if (button == BACK) new_state = READING;
+            // button up or down is ignored
+
+            display.fillScreen(GxEPD_BLACK);
+            display.setCursor(0, 60);
             display.println("Wait for full");
             display.println("charge (red light");
-            display.println("off) then press");
-            display.println("Menu");
-            display.display(true); //full refresh
-            while (1) {
-                if (digitalRead(MENU_BTN_PIN)) {
-                    // We assume that the charging circuit accurately charges to 4.20 V
-                    bat_adc_offset = 0; // clear any current calibration
-                    float voltage = getBatteryVoltage();
-                    bat_adc_offset = 4.20f - voltage;
-                    display.setCursor(20, 150);
-                    display.println("Done!");
-                    display.display(true);
-                }
-                if (digitalRead(BACK_BTN_PIN)) {
-                    goto exit;
-                }
-            }
+            display.println("off) then unplug");
+            display.println("then press Menu");
+            display.display(true);
         }
-        if (digitalRead(BACK_BTN_PIN)) {
-            goto exit;
+
+        if (new_state != BAT_STATE_NONE) {
+            state = new_state;
+            new_state = BAT_STATE_NONE;
+            button = BUTTON_NONE;
+            continue; // skip wait for button press, goto screen refresh
+        }
+
+        // Wait for next button press
+        button = BUTTON_NONE;
+        while (button == BUTTON_NONE) {
+            if (digitalRead(MENU_BTN_PIN)) button = MENU;
+            if (digitalRead(BACK_BTN_PIN)) button = BACK;
+            if (digitalRead(UP_BTN_PIN))   button = UP;
+            if (digitalRead(DOWN_BTN_PIN)) button = DOWN;
         }
     }
-
-exit:
-    display.hibernate();
-
-    guiState = APP_STATE;
 }
 
 void Watchy::showBuzz(){
