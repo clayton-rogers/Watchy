@@ -130,7 +130,7 @@ void Watchy::handleButtonPress(){
     while (!timeout) {
         if (menu_pressed) {
             if (guiState == WATCHFACE_STATE) {
-                showMenu(menuIndex, false);
+                showMenu(menuIndex, true);
             } else if (guiState == MAIN_MENU_STATE) {
                 switch(menuIndex) {
                     case 0:
@@ -164,9 +164,9 @@ void Watchy::handleButtonPress(){
                 showWatchFace(false);
                 break; // leave menu, go back to sleep
             } else if (guiState == APP_STATE) {
-                showMenu(menuIndex, false);//exit to menu if already in app
+                showMenu(menuIndex, true);//exit to menu if already in app
             } else if (guiState == FW_UPDATE_STATE) {
-                showMenu(menuIndex, false);//exit to menu if already in app
+                showMenu(menuIndex, true);//exit to menu if already in app
             }
         } else if (up_pressed) {
             if (guiState == MAIN_MENU_STATE) {//increment menu index
@@ -304,7 +304,7 @@ void Watchy::showBuzz(){
     display.display(false); //full refresh
     display.hibernate();
     vibMotor();
-    showMenu(menuIndex, false);
+    showMenu(menuIndex, true);
 }
 
 void Watchy::vibMotor(uint8_t intervalMs, uint8_t length){
@@ -475,7 +475,7 @@ void Watchy::setTime(){
     time_t t = makeTime(tm) + FUDGE;
     RTC.set(t);
 
-    showMenu(menuIndex, false);
+    showMenu(menuIndex, true);
 
 }
 
@@ -547,7 +547,7 @@ void Watchy::showAccelerometer(){
     }
     }
 
-    showMenu(menuIndex, false);
+    showMenu(menuIndex, true);
 }
 
 void Watchy::showWatchFace(bool partialRefresh){
@@ -902,7 +902,7 @@ void Watchy::updateFWBegin(){
     //turn off radios
     WiFi.mode(WIFI_OFF);
     btStop();
-    showMenu(menuIndex, false);
+    showMenu(menuIndex, true);
 }
 
 // time_t compileTime()
